@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/vegarringdal/dotr/internal/scan"
+	"github.com/lum1n/dotr/internal/scan"
 )
 
 func TestScanIncludesStowSymlinkApps(t *testing.T) {

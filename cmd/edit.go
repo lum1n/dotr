@@ -8,8 +8,8 @@ import (
 	"github.com/charmbracelet/x/editor"
 	"github.com/spf13/cobra"
 
-	"github.com/vegarringdal/dotr/internal/find"
-	"github.com/vegarringdal/dotr/internal/load"
+	"github.com/lum1n/dotr/internal/find"
+	"github.com/lum1n/dotr/internal/load"
 )
 
 var editAll bool

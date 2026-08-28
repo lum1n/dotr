@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/vegarringdal/dotr/internal/ignore"
+	"github.com/lum1n/dotr/internal/ignore"
 )
 
 const (
@@ -87,22 +87,27 @@ func Roots() (home, config string, err error) {
 	return home, config, nil
 }
 
+// MaxFiles is the soft cap on discovered entries.
+func MaxFiles() int { return maxFiles }
+
 // Scan walks home (depth 1) and XDG config (bounded recurse, follows stow symlinks).
 func Scan() ([]Entry, error) {
-	return ScanWithIgnore(nil)
+	ents, _, err := ScanWithIgnore(nil)
+	return ents, err
 }
 
 // ScanWithIgnore is Scan with a user ignore list applied during the walk.
-func ScanWithIgnore(ign *ignore.List) ([]Entry, error) {
+// truncated is true when results were capped at MaxFiles.
+func ScanWithIgnore(ign *ignore.List) (entries []Entry, truncated bool, err error) {
 	home, config, err := Roots()
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	homeEntries := scanHomeDots(home, ign)
 	cfgEntries, err := scanConfigTree(config, ign)
 	if err != nil && !os.IsNotExist(err) {
-		return homeEntries, err
+		return homeEntries, false, err
 	}
 
 	out := append(homeEntries, cfgEntries...)
@@ -113,9 +118,9 @@ func ScanWithIgnore(ign *ignore.List) ([]Entry, error) {
 		return out[i].RelPath < out[j].RelPath
 	})
 	if len(out) > maxFiles {
-		out = prioritizeTrim(out, maxFiles)
+		return prioritizeTrim(out, maxFiles), true, nil
 	}
-	return out, nil
+	return out, false, nil
 }
 
 func prioritizeTrim(in []Entry, limit int) []Entry {

@@ -3,7 +3,7 @@ package secret_test
 import (
 	"testing"
 
-	"github.com/vegarringdal/dotr/internal/secret"
+	"github.com/lum1n/dotr/internal/secret"
 )
 
 func TestPath(t *testing.T) {

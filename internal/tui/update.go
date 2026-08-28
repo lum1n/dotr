@@ -8,11 +8,12 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/vegarringdal/dotr/internal/config"
-	"github.com/vegarringdal/dotr/internal/gitstatus"
-	"github.com/vegarringdal/dotr/internal/ignore"
-	"github.com/vegarringdal/dotr/internal/preview"
-	"github.com/vegarringdal/dotr/internal/stow"
+	"github.com/lum1n/dotr/internal/config"
+	"github.com/lum1n/dotr/internal/gitstatus"
+	"github.com/lum1n/dotr/internal/ignore"
+	"github.com/lum1n/dotr/internal/preview"
+	"github.com/lum1n/dotr/internal/scan"
+	"github.com/lum1n/dotr/internal/stow"
 )
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -38,6 +39,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.cfg = msg.cfg
 		m.entries = msg.entries
+		m.truncated = msg.truncated
 		if msg.ignores != nil {
 			m.ignores = msg.ignores
 		}
@@ -52,6 +54,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			ignN = len(m.ignores.Patterns)
 		}
 		m.status = fmt.Sprintf("%d configs · %d ignores", len(m.entries), ignN)
+		if m.truncated {
+			m.status += fmt.Sprintf(" · truncated at %d", scan.MaxFiles())
+		}
 		if !m.cfg.Watch && m.watcher != nil {
 			_ = m.watcher.Close()
 			m.watcher = nil
@@ -569,21 +574,34 @@ func (m Model) doYankContents(path string) (Model, tea.Cmd) {
 func (m Model) updateConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc", "n", "q":
-		m.mode = modeBrowse
+		wasUnstow := m.confirm == confirmUnstow
 		m.confirm = confirmNone
+		m.confirmPkg = ""
+		if wasUnstow {
+			m.mode = modeStow
+			m.status = "unstow cancelled"
+			return m, nil
+		}
+		m.mode = modeBrowse
 		m.status = "cancelled"
 		return m, nil
 	case "enter", "y":
 		kind := m.confirm
 		path := m.confirmPath
+		pkg := m.confirmPkg
 		m.mode = modeBrowse
 		m.confirm = confirmNone
+		m.confirmPkg = ""
 		switch kind {
 		case confirmYankContents:
 			return m.doYankContents(path)
 		case confirmBackup:
 			m.status = "backing up…"
 			return m, backupCmd(path, m.cfg.BackupKeep)
+		case confirmUnstow:
+			m.mode = modeStow
+			m.status = fmt.Sprintf("unstow %s…", pkg)
+			return m, stowOpCmd(m.stowOpts, stow.ActionUnstow, []string{pkg})
 		}
 	}
 	return m, nil
@@ -811,7 +829,13 @@ func (m Model) updateStowKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.runSelectedStow(stow.ActionStow)
 
 	case "u":
-		return m.runSelectedStow(stow.ActionUnstow)
+		if len(m.stowPkgs) == 0 {
+			m.status = "no packages"
+			return m, nil
+		}
+		pkg := m.stowPkgs[m.stowCur].Name
+		m.askConfirmUnstow(pkg, fmt.Sprintf("⚠ unstow %q — enter confirm, esc cancel", pkg))
+		return m, nil
 
 	case "R":
 		return m.runSelectedStow(stow.ActionRestow)

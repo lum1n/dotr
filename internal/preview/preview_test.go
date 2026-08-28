@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/vegarringdal/dotr/internal/preview"
+	"github.com/lum1n/dotr/internal/preview"
 )
 
 func TestParseJSONYAMLTOML(t *testing.T) {

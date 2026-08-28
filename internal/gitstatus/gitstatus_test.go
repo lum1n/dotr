@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/vegarringdal/dotr/internal/gitstatus"
+	"github.com/lum1n/dotr/internal/gitstatus"
 )
 
 func TestMapCleanAndModified(t *testing.T) {

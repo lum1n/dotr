@@ -3,8 +3,8 @@ package find_test
 import (
 	"testing"
 
-	"github.com/vegarringdal/dotr/internal/find"
-	"github.com/vegarringdal/dotr/internal/scan"
+	"github.com/lum1n/dotr/internal/find"
+	"github.com/lum1n/dotr/internal/scan"
 )
 
 func TestBestPrefersExact(t *testing.T) {

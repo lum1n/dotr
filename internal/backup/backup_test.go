@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/vegarringdal/dotr/internal/backup"
+	"github.com/lum1n/dotr/internal/backup"
 )
 
 func TestCreateListRestore(t *testing.T) {

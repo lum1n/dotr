@@ -8,9 +8,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/vegarringdal/dotr/internal/find"
-	"github.com/vegarringdal/dotr/internal/gitstatus"
-	"github.com/vegarringdal/dotr/internal/load"
+	"github.com/lum1n/dotr/internal/find"
+	"github.com/lum1n/dotr/internal/gitstatus"
+	"github.com/lum1n/dotr/internal/load"
 )
 
 var listJSON bool
@@ -24,6 +24,9 @@ var listCmd = &cobra.Command{
 		res, err := load.All()
 		if err != nil {
 			return err
+		}
+		if res.Truncated {
+			fmt.Fprintf(os.Stderr, "warning: scan truncated at %d entries\n", len(res.Entries))
 		}
 		entries := res.Entries
 		if len(args) == 1 {

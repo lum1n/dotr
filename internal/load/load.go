@@ -4,17 +4,18 @@ package load
 import (
 	"fmt"
 
-	"github.com/vegarringdal/dotr/internal/config"
-	"github.com/vegarringdal/dotr/internal/ignore"
-	"github.com/vegarringdal/dotr/internal/preview"
-	"github.com/vegarringdal/dotr/internal/scan"
+	"github.com/lum1n/dotr/internal/config"
+	"github.com/lum1n/dotr/internal/ignore"
+	"github.com/lum1n/dotr/internal/preview"
+	"github.com/lum1n/dotr/internal/scan"
 )
 
 // Result is a loaded workspace snapshot.
 type Result struct {
-	Config  config.Config
-	Ignores *ignore.List
-	Entries []scan.Entry
+	Config    config.Config
+	Ignores   *ignore.List
+	Entries   []scan.Entry
+	Truncated bool
 }
 
 // All loads dotr config, ignore list, and scanned entries.
@@ -32,9 +33,14 @@ func All() (Result, error) {
 	for _, p := range cfg.ExtraIgnores {
 		ign.Add(p)
 	}
-	entries, err := scan.ScanWithIgnore(ign)
+	entries, truncated, err := scan.ScanWithIgnore(ign)
 	if err != nil {
 		return Result{}, fmt.Errorf("scan: %w", err)
 	}
-	return Result{Config: cfg, Ignores: ign, Entries: entries}, nil
+	return Result{
+		Config:    cfg,
+		Ignores:   ign,
+		Entries:   entries,
+		Truncated: truncated,
+	}, nil
 }

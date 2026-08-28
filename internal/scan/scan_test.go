@@ -3,8 +3,8 @@ package scan_test
 import (
 	"testing"
 
-	"github.com/vegarringdal/dotr/internal/preview"
-	"github.com/vegarringdal/dotr/internal/scan"
+	"github.com/lum1n/dotr/internal/preview"
+	"github.com/lum1n/dotr/internal/scan"
 )
 
 func TestScanFindsConfigs(t *testing.T) {

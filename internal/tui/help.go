@@ -31,7 +31,7 @@ Ignore & config
 Stow
   s               stow packages (link / unlink / restow)
   enter / l       link (stow) selected package
-  u               unlink (unstow)
+  u               unlink (unstow, confirms)
   R               restow
 
 List marks
@@ -39,11 +39,13 @@ List marks
   S               owned by a stow package
   ↗               symlink
   🔒              secret-looking path
+  ⚠cap            scan hit 1500-file soft limit
 
 CLI
   dotr list [q]   dotr edit <q>   dotr backup <q>
   dotr restore <q>   dotr config   dotr ignore [--list|--add]
   dotr stow list | link | unlink | restow [pkg…]
+  dotr doctor   dotr version
 
 Help
   ?               this screen

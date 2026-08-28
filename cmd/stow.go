@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -9,12 +10,13 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/vegarringdal/dotr/internal/config"
-	"github.com/vegarringdal/dotr/internal/stow"
+	"github.com/lum1n/dotr/internal/config"
+	"github.com/lum1n/dotr/internal/stow"
 )
 
 var stowDryRun bool
 var stowJSON bool
+var stowYes bool
 
 var stowCmd = &cobra.Command{
 	Use:   "stow",
@@ -24,7 +26,7 @@ var stowCmd = &cobra.Command{
   dotr stow              list packages and link status
   dotr stow list
   dotr stow link [pkg…]  stow (add links)
-  dotr stow unlink [pkg…] unstow
+  dotr stow unlink [pkg…] unstow (prompts unless -y / -n)
   dotr stow restow [pkg…]`,
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -120,6 +122,11 @@ func runStowAction(action stow.Action, packages []string) error {
 	if err != nil {
 		return err
 	}
+	if action == stow.ActionUnstow && !stowDryRun {
+		if err := confirmUnstow(packages); err != nil {
+			return err
+		}
+	}
 	out, err := stow.Run(opts, action, packages, stowDryRun)
 	if out != "" {
 		fmt.Println(out)
@@ -133,8 +140,25 @@ func runStowAction(action stow.Action, packages []string) error {
 	return nil
 }
 
+func confirmUnstow(packages []string) error {
+	if stowYes {
+		return nil
+	}
+	fmt.Fprintf(os.Stderr, "Unstow %s? [y/N] ", strings.Join(packages, ", "))
+	line, err := bufio.NewReader(os.Stdin).ReadString('\n')
+	if err != nil {
+		return fmt.Errorf("confirm: %w (pass -y to skip)", err)
+	}
+	ans := strings.TrimSpace(strings.ToLower(line))
+	if ans != "y" && ans != "yes" {
+		return fmt.Errorf("cancelled")
+	}
+	return nil
+}
+
 func init() {
 	stowCmd.PersistentFlags().BoolVarP(&stowDryRun, "dry-run", "n", false, "pass -n to stow")
+	stowCmd.PersistentFlags().BoolVarP(&stowYes, "yes", "y", false, "skip unlink confirmation")
 	stowListCmd.Flags().BoolVar(&stowJSON, "json", false, "JSON output")
 	stowCmd.AddCommand(stowListCmd, stowLinkCmd, stowUnlinkCmd, stowRestowCmd)
 	rootCmd.AddCommand(stowCmd)

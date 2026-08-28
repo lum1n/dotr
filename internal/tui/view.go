@@ -8,10 +8,10 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
-	"github.com/vegarringdal/dotr/internal/gitstatus"
-	"github.com/vegarringdal/dotr/internal/preview"
-	"github.com/vegarringdal/dotr/internal/scan"
-	"github.com/vegarringdal/dotr/internal/secret"
+	"github.com/lum1n/dotr/internal/gitstatus"
+	"github.com/lum1n/dotr/internal/preview"
+	"github.com/lum1n/dotr/internal/scan"
+	"github.com/lum1n/dotr/internal/secret"
 )
 
 func (m Model) View() tea.View {
@@ -66,6 +66,9 @@ func (m Model) renderTitle() string {
 		label = fmt.Sprintf("dotr  %d/%d", len(m.filtered), len(m.entries))
 		if m.filter != "" {
 			label += fmt.Sprintf("  /%s", m.filter)
+		}
+		if m.truncated {
+			label += "  ⚠cap"
 		}
 		if m.yankPath != "" {
 			label += "  ⎘"

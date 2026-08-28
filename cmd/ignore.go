@@ -5,8 +5,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/vegarringdal/dotr/internal/config"
-	"github.com/vegarringdal/dotr/internal/ignore"
+	"github.com/lum1n/dotr/internal/config"
+	"github.com/lum1n/dotr/internal/ignore"
 )
 
 var configCmd = &cobra.Command{

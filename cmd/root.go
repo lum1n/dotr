@@ -7,7 +7,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/spf13/cobra"
 
-	"github.com/vegarringdal/dotr/internal/tui"
+	"github.com/lum1n/dotr/internal/tui"
 )
 
 var rootCmd = &cobra.Command{

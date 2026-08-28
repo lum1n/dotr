@@ -3,7 +3,7 @@ package ignore_test
 import (
 	"testing"
 
-	"github.com/vegarringdal/dotr/internal/ignore"
+	"github.com/lum1n/dotr/internal/ignore"
 )
 
 func TestMatchPrefix(t *testing.T) {

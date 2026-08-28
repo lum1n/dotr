@@ -12,16 +12,16 @@ import (
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/vegarringdal/dotr/internal/backup"
-	"github.com/vegarringdal/dotr/internal/config"
-	"github.com/vegarringdal/dotr/internal/gitstatus"
-	"github.com/vegarringdal/dotr/internal/ignore"
-	"github.com/vegarringdal/dotr/internal/load"
-	"github.com/vegarringdal/dotr/internal/preview"
-	"github.com/vegarringdal/dotr/internal/scan"
-	"github.com/vegarringdal/dotr/internal/secret"
-	"github.com/vegarringdal/dotr/internal/stow"
-	"github.com/vegarringdal/dotr/internal/watch"
+	"github.com/lum1n/dotr/internal/backup"
+	"github.com/lum1n/dotr/internal/config"
+	"github.com/lum1n/dotr/internal/gitstatus"
+	"github.com/lum1n/dotr/internal/ignore"
+	"github.com/lum1n/dotr/internal/load"
+	"github.com/lum1n/dotr/internal/preview"
+	"github.com/lum1n/dotr/internal/scan"
+	"github.com/lum1n/dotr/internal/secret"
+	"github.com/lum1n/dotr/internal/stow"
+	"github.com/lum1n/dotr/internal/watch"
 )
 
 type focusPane int
@@ -51,14 +51,16 @@ const (
 	confirmNone confirmKind = iota
 	confirmYankContents
 	confirmBackup
+	confirmUnstow
 )
 
 type scanDoneMsg struct {
-	entries []scan.Entry
-	ignores *ignore.List
-	cfg     config.Config
-	git     map[string]gitstatus.Kind
-	err     error
+	entries   []scan.Entry
+	ignores   *ignore.List
+	cfg       config.Config
+	git       map[string]gitstatus.Kind
+	truncated bool
+	err       error
 }
 
 type previewDoneMsg struct {
@@ -150,6 +152,7 @@ type Model struct {
 
 	confirm     confirmKind
 	confirmPath string
+	confirmPkg  string
 
 	git map[string]gitstatus.Kind
 
@@ -158,6 +161,7 @@ type Model struct {
 	stowCur    int
 	stowOff    int
 	stowOwners map[string]string
+	truncated  bool
 
 	watcher *watch.Watcher
 
@@ -210,7 +214,12 @@ func scanCmd() tea.Cmd {
 		if err != nil {
 			return scanDoneMsg{err: err}
 		}
-		msg := scanDoneMsg{entries: res.Entries, ignores: res.Ignores, cfg: res.Config}
+		msg := scanDoneMsg{
+			entries:   res.Entries,
+			ignores:   res.Ignores,
+			cfg:       res.Config,
+			truncated: res.Truncated,
+		}
 		if res.Config.GitStatus {
 			paths := make([]string, len(res.Entries))
 			for i, e := range res.Entries {
@@ -682,6 +691,15 @@ func (m *Model) askConfirm(kind confirmKind, path, msg string) {
 	m.mode = modeConfirm
 	m.confirm = kind
 	m.confirmPath = path
+	m.confirmPkg = ""
+	m.status = msg
+}
+
+func (m *Model) askConfirmUnstow(pkg, msg string) {
+	m.mode = modeConfirm
+	m.confirm = confirmUnstow
+	m.confirmPath = pkg
+	m.confirmPkg = pkg
 	m.status = msg
 }
 

@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/vegarringdal/dotr/internal/scan"
+	"github.com/lum1n/dotr/internal/scan"
 )
 
 // Display returns the UI-style path for an entry.

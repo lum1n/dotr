@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/vegarringdal/dotr/internal/stow"
+	"github.com/lum1n/dotr/internal/stow"
 )
 
 func TestReadRC(t *testing.T) {

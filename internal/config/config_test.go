@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/vegarringdal/dotr/internal/config"
+	"github.com/lum1n/dotr/internal/config"
 )
 
 func TestLoadDefaults(t *testing.T) {

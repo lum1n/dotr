@@ -2,15 +2,32 @@
 
 Lightweight TUI + CLI for browsing and editing local configs (`$HOME` dots + `$XDG_CONFIG_HOME`), plus a thin GNU Stow layer.
 
+## Install
+
+```bash
+go install github.com/lum1n/dotr@latest
+```
+
+Or from a clone:
+
+```bash
+git clone https://github.com/lum1n/dotr.git
+cd dotr
+make install   # or: make build && ./dotr
+```
+
+Requires Go 1.26+, `$EDITOR`, and optionally GNU `stow` for stow commands.
+
 ## Run
 
 ```bash
-go run .              # TUI
-go build -o dotr .
-./dotr list nvim
-./dotr edit alacritty
-./dotr backup .zshrc
-./dotr stow list
+dotr                 # TUI
+dotr list nvim
+dotr edit alacritty
+dotr backup .zshrc
+dotr stow list
+dotr doctor
+dotr version
 ```
 
 ## CLI
@@ -26,8 +43,10 @@ go build -o dotr .
 | `dotr ignore` | Edit ignore file (`--list`, `--add PATTERN`) |
 | `dotr stow` / `stow list` | List packages + link status (`--json`) |
 | `dotr stow link [pkg…]` | Stow (`-n` dry-run) |
-| `dotr stow unlink [pkg…]` | Unstow |
+| `dotr stow unlink [pkg…]` | Unstow (prompts; `-y` skips; `-n` dry-run) |
 | `dotr stow restow [pkg…]` | Restow |
+| `dotr doctor` | Check environment |
+| `dotr version` | Print version |
 | `dotr completion zsh` | Shell completion |
 
 ## TUI keys
@@ -49,9 +68,9 @@ go build -o dotr .
 | `?` | Help |
 | `q` | Quit |
 
-Stow mode (`s`): `enter`/`l` link, `u` unlink, `R` restow, `esc` back.
+Stow mode (`s`): `enter`/`l` link, `u` unlink (confirm), `R` restow, `esc` back.
 
-List marks: `·MAD?` git, `S` stow-owned, `↗` symlink, `🔒` secret.
+List marks: `·MAD?` git, `S` stow-owned, `↗` symlink, `🔒` secret. Title shows `⚠cap` when the scan hit its 1500-file soft limit.
 
 With `watch: true`, saving the selected file (or changes under watched dirs) reloads preview / rescans automatically.
 
@@ -85,10 +104,6 @@ dotr shells out to GNU `stow`. Package status walks each package and checks the 
 
 If `~/.stowrc` has `--dir=…/dotfiles` but links were created as package `dotfiles` under the parent (`stow -d ~/repos -t ~ dotfiles`), dotr detects that and uses the parent dir + package name automatically. Override with `stow_dir` / `stow_target` when needed.
 
-## Roadmap
+## License
 
-0. Spike — scan, dual-pane, preview, `$EDITOR`
-1. Cockpit — filter, yank/paste, backup/restore, parse badges, help
-2. Sharp edges — dotr config, new-file, secret warnings, mouse
-3. Optional — CLI verbs, file watchers, git status overlay
-4. **Stow** — package status, stow/unstow/restow, TUI + CLI
+MIT
