@@ -1,0 +1,5 @@
+/dotr
+/*.exe
+*.test
+*.out
+/dist/
