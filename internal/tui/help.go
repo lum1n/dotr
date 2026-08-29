@@ -10,7 +10,7 @@ Navigation
   / · ctrl+f      search (fuzzy; live results; ↑↓/ctrl+n/p move)
   enter           keep search · esc clear
   r               rescan
-  mouse           click list / wheel (live reload when watch: true)
+  mouse           click list / wheel (preview reload when watch: true)
   q               quit
 
 Files

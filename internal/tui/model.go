@@ -197,6 +197,9 @@ type Model struct {
 	status       string
 	scanning     bool
 	err          error
+
+	junkBuf string
+	junkID  int
 }
 
 // New creates the initial model.

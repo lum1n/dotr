@@ -78,7 +78,7 @@ Stow mode (`s`): `enter`/`l` link, `u` unlink (confirm), `R` restow, `esc` back.
 
 List marks: `·MAD?` git, `S` stow-owned, `↗` symlink, `🔒` secret. Title shows `⚠cap` when the scan hit its 1500-file soft limit.
 
-With `watch: true`, saving the selected file (or changes under watched dirs) reloads preview / rescans automatically.
+With `watch: true`, saving the selected file reloads its preview. The config list does not auto-rescan; press `r`, or it refreshes after `$EDITOR` and mutating actions (ignore, new, paste, symlink, stow).
 
 ## Config
 

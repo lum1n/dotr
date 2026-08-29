@@ -90,7 +90,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			break
 		}
 		cmds = append(cmds, waitWatcherCmd(m.watcher))
-		// Selected file wrote → refresh preview; structural changes → rescan.
+		// Preview only — list rescans are manual (`r`), after $EDITOR, or
+		// after mutating actions. Watcher noise (and leaked rgb: keystrokes)
+		// used to stampede a full scan.
 		if e, ok := m.selected(); ok && samePath(msg.path, e.AbsPath) && msg.op == "write" {
 			preview.Invalidate(e.AbsPath)
 			m.previewPath = ""
@@ -99,15 +101,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				cmds = append(cmds, refreshGitCmd([]string{e.AbsPath}))
 			}
 			m.status = "reloaded " + filepath.Base(msg.path)
-			break
-		}
-		if msg.op == "create" || msg.op == "remove" || msg.op == "rename" {
-			m.status = "fs " + msg.op + "…"
-			cmds = append(cmds, delayedRescan())
-		} else if e, ok := m.selected(); ok && samePath(filepath.Dir(msg.path), filepath.Dir(e.AbsPath)) {
-			// sibling change in focused dir
-			m.status = "dir changed…"
-			cmds = append(cmds, delayedRescan())
 		}
 
 	case rescanTickMsg:
@@ -319,6 +312,27 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, cmd)
 		}
 
+	case tea.PasteMsg:
+		if looksLikeTermReply(msg.Content) || looksLikeTermReply(strings.TrimSpace(msg.Content)) {
+			break
+		}
+		if m.mode == modeFilter {
+			m.input.SetValue(m.input.Value() + msg.Content)
+			m.filter = m.input.Value()
+			m.rebuildFilter()
+			if isFilterJunk(m.filter) {
+				return m.abortJunkFilter()
+			}
+		}
+
+	case junkTickMsg:
+		if msg.id != m.junkID {
+			break
+		}
+		var cmd tea.Cmd
+		m, cmd = m.flushJunkTimeout(msg.buf)
+		cmds = append(cmds, cmd)
+
 	case tea.KeyPressMsg:
 		switch m.mode {
 		case modeIgnores:
@@ -345,7 +359,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateStowKey(msg)
 		default:
 			var cmd tea.Cmd
-			m, cmd = m.updateBrowseKey(msg)
+			m, cmd = m.ingestBrowseKey(msg)
 			cmds = append(cmds, cmd)
 		}
 	}
@@ -737,6 +751,9 @@ func (m Model) updateFilterKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	m.input, cmd = m.input.Update(msg)
 	m.filter = m.input.Value()
+	if isFilterJunk(m.filter) {
+		return m.abortJunkFilter()
+	}
 	m.rebuildFilter()
 	m.status = fmt.Sprintf("%d/%d matches", len(m.filtered), len(m.entries))
 	return m, tea.Batch(cmd, m.requestPreview())
