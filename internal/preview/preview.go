@@ -22,6 +22,11 @@ import (
 const (
 	maxPreviewBytes = 256 << 10 // 256 KiB
 	maxPreviewLines = 400
+	// Viewport (and lipgloss) measure/cut every line on each frame. A
+	// minified JSON/JS one-liner of tens of KB, after chroma ANSI, makes
+	// ansi.StringWidth / ansi.Cut walk megabytes on the Bubble Tea thread
+	// and the whole TUI appears frozen.
+	maxPreviewCols = 240
 )
 
 // ParseStatus is the structured-parse result for known formats.
@@ -110,9 +115,12 @@ func renderUncached(path string, width int, fi os.FileInfo) Result {
 	lines := strings.Split(text, "\n")
 	if len(lines) > maxPreviewLines {
 		lines = lines[:maxPreviewLines]
-		text = strings.Join(lines, "\n")
 		res.Truncated = true
 	}
+	if clampLineCols(lines, maxPreviewCols) {
+		res.Truncated = true
+	}
+	text = strings.Join(lines, "\n")
 
 	ext := strings.ToLower(filepath.Ext(path))
 	base := strings.ToLower(filepath.Base(path))
@@ -223,6 +231,38 @@ func renderMarkdown(text string, width int) (string, error) {
 		return "", err
 	}
 	return r.Render(text)
+}
+
+func clampLineCols(lines []string, maxCols int) bool {
+	if maxCols <= 0 {
+		return false
+	}
+	truncated := false
+	for i, line := range lines {
+		cut, ok := truncateRunes(line, maxCols)
+		if !ok {
+			continue
+		}
+		lines[i] = cut
+		truncated = true
+	}
+	return truncated
+}
+
+// truncateRunes keeps the first n runes. It does not scan the rest of a huge
+// line (RuneCountInString would walk all 256 KiB).
+func truncateRunes(s string, n int) (string, bool) {
+	i := 0
+	count := 0
+	for i < len(s) {
+		_, size := utf8.DecodeRuneInString(s[i:])
+		if count >= n {
+			return s[:i] + "…", true
+		}
+		i += size
+		count++
+	}
+	return s, false
 }
 
 func isBinary(data []byte) bool {

@@ -73,6 +73,31 @@ func TestPreviewCacheHitAndInvalidate(t *testing.T) {
 	}
 }
 
+func TestLongLinePreviewStaysBounded(t *testing.T) {
+	preview.Clear()
+	t.Cleanup(preview.Clear)
+
+	dir := t.TempDir()
+	// Minified lockfiles / theme JSON are often a single 100KB+ line.
+	// Without a column cap, chroma + viewport ansi.Cut freeze the TUI.
+	body := `{"x":"` + strings.Repeat("a", 80_000) + `"}`
+	p := filepath.Join(dir, "huge.json")
+	if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	r := preview.Render(p, 80)
+	if r.Err != nil {
+		t.Fatal(r.Err)
+	}
+	if !r.Truncated {
+		t.Fatal("expected truncated preview for a huge one-liner")
+	}
+	if len(r.Content) > 8<<10 {
+		t.Fatalf("preview content still huge: %d bytes", len(r.Content))
+	}
+}
+
 func TestMarkdownPreview(t *testing.T) {
 	dir := t.TempDir()
 	md := filepath.Join(dir, "note.md")
