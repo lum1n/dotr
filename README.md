@@ -5,18 +5,16 @@ Lightweight TUI + CLI for browsing and editing local configs (`$HOME` dots + `$X
 ## Install
 
 ```bash
-go install github.com/lum1n/dotr@latest
+curl -fsSL https://raw.githubusercontent.com/lum1n/dotr/master/install.sh | sh
 ```
 
-Or from a clone:
+Installs to `~/.local/bin/dotr` (override with `BINDIR=/usr/local/bin`).
 
-```bash
-git clone https://github.com/lum1n/dotr.git
-cd dotr
-make install   # or: make build && ./dotr
-```
+`go install github.com/lum1n/dotr@latest` also works if you have Go 1.26+, but it compiles from source.
 
-Requires Go 1.26+, `$EDITOR`, and optionally GNU `stow` for stow commands.
+From a clone: `make install`.
+
+Needs `$EDITOR`, and optionally GNU `stow`.
 
 ## Run
 
