@@ -74,6 +74,12 @@ type previewDoneMsg struct {
 	result preview.Result
 }
 
+type previewTickMsg struct {
+	id    int
+	path  string
+	width int
+}
+
 type ignoreSavedMsg struct {
 	pattern string
 	err     error
@@ -228,20 +234,13 @@ func scanCmd() tea.Cmd {
 		if err != nil {
 			return scanDoneMsg{err: err}
 		}
-		msg := scanDoneMsg{
+		// Git marks load in the background after the list is shown.
+		return scanDoneMsg{
 			entries:   res.Entries,
 			ignores:   res.Ignores,
 			cfg:       res.Config,
 			truncated: res.Truncated,
 		}
-		if res.Config.GitStatus {
-			paths := make([]string, len(res.Entries))
-			for i, e := range res.Entries {
-				paths[i] = e.AbsPath
-			}
-			msg.git = gitstatus.Map(paths)
-		}
-		return msg
 	}
 }
 
@@ -560,6 +559,8 @@ func (m *Model) updateFocusWatch() {
 	}
 }
 
+const previewSettle = 70 * time.Millisecond
+
 func (m *Model) requestPreview() tea.Cmd {
 	e, ok := m.selected()
 	if !ok {
@@ -573,13 +574,23 @@ func (m *Model) requestPreview() tea.Cmd {
 	if e.AbsPath == m.previewPath && m.previewErr == "" && m.viewport.TotalLineCount() > 0 {
 		return nil
 	}
-	m.previewID++
-	id := m.previewID
-	m.previewPath = e.AbsPath
-	m.status = "loading preview…"
 	_, right := m.paneWidths()
 	innerW := max(20, right-6)
-	return previewCmd(id, e.AbsPath, innerW)
+	if hit, ok := preview.Lookup(e.AbsPath, innerW); ok {
+		m.previewID++
+		id := m.previewID
+		m.previewPath = e.AbsPath
+		return func() tea.Msg {
+			return previewDoneMsg{id: id, result: hit}
+		}
+	}
+	m.previewID++
+	id := m.previewID
+	// Wait until navigation settles so hold-j / paging does not chroma-highlight
+	// every file (and so markdown preview never races the TTY for stdin).
+	return tea.Tick(previewSettle, func(time.Time) tea.Msg {
+		return previewTickMsg{id: id, path: e.AbsPath, width: innerW}
+	})
 }
 
 func (m Model) moveCursor(delta int) (Model, tea.Cmd) {

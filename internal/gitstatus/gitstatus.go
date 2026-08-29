@@ -66,19 +66,15 @@ func Map(paths []string) map[string]Kind {
 
 	type item struct {
 		orig string
-		real string
-		root string
 		rel  string
 	}
 
+	cache := newRepoCache()
 	byRoot := map[string][]item{}
 	for _, p := range paths {
-		real, err := filepath.EvalSymlinks(p)
-		if err != nil {
-			real = p
-		}
-		root, err := repoRoot(real)
-		if err != nil || root == "" {
+		real := cache.realPath(p)
+		root := cache.repoRoot(real)
+		if root == "" {
 			out[p] = None
 			continue
 		}
@@ -87,7 +83,7 @@ func Map(paths []string) map[string]Kind {
 			out[p] = None
 			continue
 		}
-		byRoot[root] = append(byRoot[root], item{orig: p, real: real, root: root, rel: rel})
+		byRoot[root] = append(byRoot[root], item{orig: p, rel: rel})
 	}
 
 	var mu sync.Mutex
@@ -113,18 +109,80 @@ func Map(paths []string) map[string]Kind {
 	return out
 }
 
-func repoRoot(path string) (string, error) {
+// repoCache finds symlink-resolved paths and git tops without spawning git
+// once per file. A single Map call of 1100 paths in one repo should do a
+// handful of stats plus one `git status`.
+type repoCache struct {
+	real    map[string]string
+	dirReal map[string]string
+	root    map[string]string // dir → repo root or ""
+}
+
+func newRepoCache() *repoCache {
+	return &repoCache{
+		real:    map[string]string{},
+		dirReal: map[string]string{},
+		root:    map[string]string{},
+	}
+}
+
+func (c *repoCache) realPath(p string) string {
+	if v, ok := c.real[p]; ok {
+		return v
+	}
+	dir := filepath.Dir(p)
+	if rd, ok := c.dirReal[dir]; ok {
+		out := filepath.Join(rd, filepath.Base(p))
+		c.real[p] = out
+		return out
+	}
+	real, err := filepath.EvalSymlinks(p)
+	if err != nil {
+		c.real[p] = p
+		c.dirReal[dir] = dir
+		return p
+	}
+	c.real[p] = real
+	c.dirReal[dir] = filepath.Dir(real)
+	return real
+}
+
+func (c *repoCache) repoRoot(path string) string {
 	dir := path
-	fi, err := os.Stat(path)
-	if err == nil && !fi.IsDir() {
+	if fi, err := os.Stat(path); err == nil && !fi.IsDir() {
 		dir = filepath.Dir(path)
 	}
-	cmd := exec.Command("git", "-C", dir, "rev-parse", "--show-toplevel")
-	out, err := cmd.Output()
-	if err != nil {
-		return "", err
+
+	var chain []string
+	cur := dir
+	for {
+		if v, cached := c.root[cur]; cached {
+			for _, d := range chain {
+				c.root[d] = v
+			}
+			return v
+		}
+		chain = append(chain, cur)
+		if isGitRepo(cur) {
+			for _, d := range chain {
+				c.root[d] = cur
+			}
+			return cur
+		}
+		parent := filepath.Dir(cur)
+		if parent == cur {
+			for _, d := range chain {
+				c.root[d] = ""
+			}
+			return ""
+		}
+		cur = parent
 	}
-	return strings.TrimSpace(string(out)), nil
+}
+
+func isGitRepo(dir string) bool {
+	_, err := os.Lstat(filepath.Join(dir, ".git"))
+	return err == nil
 }
 
 func porcelain(root string) map[string]Kind {

@@ -58,6 +58,19 @@ func Render(path string, width int) Result {
 		res.Content = err.Error()
 		return res
 	}
+	key := keyOf(path, width, fi)
+	if hit, ok := previewCache.get(key); ok {
+		return hit
+	}
+	res = renderUncached(path, width, fi)
+	if res.Err == nil {
+		previewCache.put(key, res)
+	}
+	return res
+}
+
+func renderUncached(path string, width int, fi os.FileInfo) Result {
+	res := Result{Path: path}
 	if fi.IsDir() {
 		res.Content = "(directory)"
 		return res
@@ -118,9 +131,6 @@ func Render(path string, width int) Result {
 	lexer := lexers.Match(base)
 	if lexer == nil {
 		lexer = lexers.Match(path)
-	}
-	if lexer == nil {
-		lexer = lexers.Analyse(text)
 	}
 	if lexer == nil {
 		lexer = lexers.Fallback
@@ -201,8 +211,12 @@ func (r Result) Badge() string {
 }
 
 func renderMarkdown(text string, width int) (string, error) {
+	// Never use WithAutoStyle: it calls termenv.HasDarkBackground, which
+	// writes OSC 11 to the TTY and reads stdin. Inside the TUI that races
+	// Bubble Tea and leaks the color reply (e.g. rgb:2121/2121/2121) as
+	// keystrokes — opening search with "2121" prefilled.
 	r, err := glamour.NewTermRenderer(
-		glamour.WithAutoStyle(),
+		glamour.WithStandardStyle("dark"),
 		glamour.WithWordWrap(width),
 	)
 	if err != nil {

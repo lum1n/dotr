@@ -12,7 +12,6 @@ import (
 	"github.com/lum1n/dotr/internal/preview"
 	"github.com/lum1n/dotr/internal/scan"
 	"github.com/lum1n/dotr/internal/secret"
-	"github.com/lum1n/dotr/internal/symlink"
 )
 
 func (m Model) View() tea.View {
@@ -342,15 +341,7 @@ func (m Model) renderPreviewHeader(width int) string {
 	}
 	parts = append(parts, formatSize(e.Size))
 	if e.Symlink {
-		if info, err := symlink.Read(e.AbsPath); err == nil {
-			arrow := "→ " + info.Target
-			if info.Dangle {
-				arrow = "⚠ " + info.Target
-			}
-			parts = append(parts, arrow)
-		} else {
-			parts = append(parts, "→")
-		}
+		parts = append(parts, "→")
 	}
 	line := strings.Join(parts, "  ")
 	return m.styles.muted.Render(truncate(line, width))

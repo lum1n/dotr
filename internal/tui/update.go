@@ -64,6 +64,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.updateFocusWatch()
 		cmds = append(cmds, refreshStowCmd(m.cfg, m.entries))
+		if m.cfg.GitStatus {
+			paths := make([]string, len(m.entries))
+			for i, e := range m.entries {
+				paths[i] = e.AbsPath
+			}
+			cmds = append(cmds, refreshGitCmd(paths))
+		}
 		if m.mode == modeBrowse || m.mode == modeFilter {
 			m.previewPath = ""
 			cmds = append(cmds, m.requestPreview())
@@ -85,6 +92,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, waitWatcherCmd(m.watcher))
 		// Selected file wrote → refresh preview; structural changes → rescan.
 		if e, ok := m.selected(); ok && samePath(msg.path, e.AbsPath) && msg.op == "write" {
+			preview.Invalidate(e.AbsPath)
 			m.previewPath = ""
 			cmds = append(cmds, m.requestPreview())
 			if m.cfg.GitStatus {
@@ -151,6 +159,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		cmds = append(cmds, refreshStowCmd(m.cfg, m.entries), delayedRescan())
+
+	case previewTickMsg:
+		if msg.id != m.previewID {
+			break
+		}
+		e, ok := m.selected()
+		if !ok || e.AbsPath != msg.path {
+			break
+		}
+		m.previewPath = msg.path
+		cmds = append(cmds, previewCmd(msg.id, msg.path, msg.width))
 
 	case previewDoneMsg:
 		if msg.id != m.previewID {
@@ -273,6 +292,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			break
 		}
 		m.status = "edited " + filepath.Base(msg.path)
+		preview.Invalidate(msg.path)
 		if ignPath, err := ignore.Path(); err == nil && msg.path == ignPath {
 			m.scanning = true
 			return m, scanCmd()
