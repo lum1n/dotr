@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -21,6 +22,7 @@ import (
 	"github.com/lum1n/dotr/internal/scan"
 	"github.com/lum1n/dotr/internal/secret"
 	"github.com/lum1n/dotr/internal/stow"
+	"github.com/lum1n/dotr/internal/symlink"
 	"github.com/lum1n/dotr/internal/watch"
 )
 
@@ -43,6 +45,9 @@ const (
 	modeNew
 	modeConfirm
 	modeStow
+	modeLinkPath
+	modeLinkTarget
+	modeRetarget
 )
 
 type confirmKind int
@@ -52,6 +57,7 @@ const (
 	confirmYankContents
 	confirmBackup
 	confirmUnstow
+	confirmDeleteSymlink
 )
 
 type scanDoneMsg struct {
@@ -89,6 +95,12 @@ type pasteDoneMsg struct {
 }
 
 type newFileDoneMsg struct {
+	path string
+	err  error
+}
+
+type symlinkDoneMsg struct {
+	op   string
 	path string
 	err  error
 }
@@ -154,6 +166,8 @@ type Model struct {
 	confirmPath string
 	confirmPkg  string
 
+	linkPath string // pending symlink path while prompting for target
+
 	git map[string]gitstatus.Kind
 
 	stowOpts   stow.Options
@@ -188,7 +202,7 @@ func New() Model {
 	ti := textinput.New()
 	ti.CharLimit = 256
 	ti.Prompt = "/ "
-	ti.Placeholder = "filter…"
+	ti.Placeholder = "search apps & paths…"
 
 	return Model{
 		styles:   newStyles(),
@@ -366,6 +380,27 @@ func newFileCmd(path string) tea.Cmd {
 	}
 }
 
+func symlinkCreateCmd(link, target string) tea.Cmd {
+	return func() tea.Msg {
+		err := symlink.Create(link, target)
+		return symlinkDoneMsg{op: "created", path: link, err: err}
+	}
+}
+
+func symlinkRetargetCmd(link, target string) tea.Cmd {
+	return func() tea.Msg {
+		err := symlink.Retarget(link, target)
+		return symlinkDoneMsg{op: "retargeted", path: link, err: err}
+	}
+}
+
+func symlinkRemoveCmd(link string) tea.Cmd {
+	return func() tea.Msg {
+		err := symlink.Remove(link)
+		return symlinkDoneMsg{op: "removed", path: link, err: err}
+	}
+}
+
 func copyFile(src, dest string) error {
 	in, err := os.Open(src)
 	if err != nil {
@@ -391,24 +426,39 @@ func copyFile(src, dest string) error {
 
 func (m *Model) rebuildFilter() {
 	m.filtered = m.filtered[:0]
-	q := strings.ToLower(strings.TrimSpace(m.filter))
-	parts := strings.Fields(q)
-	for i, e := range m.entries {
-		if len(parts) == 0 {
+	q := normalizeQuery(m.filter)
+	if q == "" {
+		for i := range m.entries {
 			m.filtered = append(m.filtered, i)
+		}
+		if m.cursor >= len(m.filtered) {
+			m.cursor = max(0, len(m.filtered)-1)
+		}
+		m.ensureVisible()
+		return
+	}
+
+	type hit struct {
+		idx   int
+		score int
+	}
+	hits := make([]hit, 0, len(m.entries))
+	for i, e := range m.entries {
+		hay := searchHaystack(e.App, e.RelPath, e.AbsPath)
+		score := fuzzyScore(q, hay)
+		if score < 0 {
 			continue
 		}
-		hay := strings.ToLower(e.App + "/" + e.RelPath + " " + e.AbsPath)
-		ok := true
-		for _, p := range parts {
-			if !strings.Contains(hay, p) {
-				ok = false
-				break
-			}
+		hits = append(hits, hit{idx: i, score: score})
+	}
+	sort.SliceStable(hits, func(i, j int) bool {
+		if hits[i].score != hits[j].score {
+			return hits[i].score > hits[j].score
 		}
-		if ok {
-			m.filtered = append(m.filtered, i)
-		}
+		return hits[i].idx < hits[j].idx
+	})
+	for _, h := range hits {
+		m.filtered = append(m.filtered, h.idx)
 	}
 	if m.cursor >= len(m.filtered) {
 		m.cursor = max(0, len(m.filtered)-1)
@@ -472,7 +522,8 @@ func (m Model) listInnerHeight() int {
 
 func (m Model) contentSize() (w, h int) {
 	h = m.height - 1 - 1 - 2
-	if m.mode == modeFilter || m.mode == modePaste || m.mode == modeNew {
+	if m.mode == modeFilter || m.mode == modePaste || m.mode == modeNew ||
+		m.mode == modeLinkPath || m.mode == modeLinkTarget || m.mode == modeRetarget {
 		h--
 	}
 	w = m.width
@@ -618,10 +669,12 @@ func (m *Model) enterStow() tea.Cmd {
 
 func (m *Model) enterFilter() tea.Cmd {
 	m.mode = modeFilter
+	m.focus = focusList
 	m.input.Prompt = "/ "
-	m.input.Placeholder = "filter apps & paths…"
+	m.input.Placeholder = "search apps & paths…  (j/k move · enter keep · esc clear)"
 	m.input.SetValue(m.filter)
 	m.input.CursorEnd()
+	m.status = fmt.Sprintf("%d/%d matches", len(m.filtered), len(m.entries))
 	return m.input.Focus()
 }
 
@@ -661,6 +714,66 @@ func (m *Model) enterNew() tea.Cmd {
 	m.input.SetValue(def)
 	m.input.CursorEnd()
 	m.status = "path under ~/.config, or ~/./home file, or absolute"
+	return m.input.Focus()
+}
+
+func (m *Model) enterLinkPath() tea.Cmd {
+	m.mode = modeLinkPath
+	m.linkPath = ""
+	def := "app/link"
+	if e, ok := m.selected(); ok {
+		switch e.App {
+		case "home":
+			def = e.RelPath + ".link"
+		case "config":
+			def = e.RelPath
+		default:
+			def = e.App + "/link"
+		}
+	}
+	m.input.Prompt = "link: "
+	m.input.Placeholder = "path for new symlink"
+	m.input.SetValue(def)
+	m.input.CursorEnd()
+	m.status = "where the symlink will live"
+	return m.input.Focus()
+}
+
+func (m *Model) enterLinkTarget(linkPath string) tea.Cmd {
+	m.mode = modeLinkTarget
+	m.linkPath = linkPath
+	def := m.yankPath
+	if def == "" {
+		if e, ok := m.selected(); ok {
+			def = e.AbsPath
+		}
+	}
+	m.input.Prompt = "→ "
+	m.input.Placeholder = "target path (absolute, relative, or ~/…)"
+	m.input.SetValue(def)
+	m.input.CursorEnd()
+	m.status = "target for " + linkPath
+	return m.input.Focus()
+}
+
+func (m *Model) enterRetarget() tea.Cmd {
+	e, ok := m.selected()
+	if !ok {
+		m.status = "no selection"
+		return nil
+	}
+	info, err := symlink.Read(e.AbsPath)
+	if err != nil {
+		m.status = err.Error()
+		return nil
+	}
+	m.mode = modeRetarget
+	m.linkPath = e.AbsPath
+	m.input.Prompt = "→ "
+	m.input.Placeholder = "new symlink target"
+	m.input.SetValue(info.Target)
+	m.input.CursorEnd()
+	m.status = "retarget " + e.AbsPath
 	return m.input.Focus()
 }
 

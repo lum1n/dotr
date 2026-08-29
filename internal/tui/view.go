@@ -12,6 +12,7 @@ import (
 	"github.com/lum1n/dotr/internal/preview"
 	"github.com/lum1n/dotr/internal/scan"
 	"github.com/lum1n/dotr/internal/secret"
+	"github.com/lum1n/dotr/internal/symlink"
 )
 
 func (m Model) View() tea.View {
@@ -24,7 +25,8 @@ func (m Model) View() tea.View {
 	var parts []string
 	parts = append(parts, m.renderTitle())
 	parts = append(parts, m.renderBody())
-	if m.mode == modeFilter || m.mode == modePaste || m.mode == modeNew {
+	if m.mode == modeFilter || m.mode == modePaste || m.mode == modeNew ||
+		m.mode == modeLinkPath || m.mode == modeLinkTarget || m.mode == modeRetarget {
 		parts = append(parts, m.styles.status.Width(m.width).Render(m.input.View()))
 	}
 	parts = append(parts, m.renderStatus())
@@ -55,11 +57,18 @@ func (m Model) renderTitle() string {
 	case modeHelp:
 		label = "dotr  help"
 	case modeFilter:
-		label = fmt.Sprintf("dotr  %d/%d  filter", len(m.filtered), len(m.entries))
+		label = fmt.Sprintf("dotr  %d/%d  search", len(m.filtered), len(m.entries))
+		if m.filter != "" {
+			label += fmt.Sprintf("  /%s", m.filter)
+		}
 	case modePaste:
 		label = "dotr  paste"
 	case modeNew:
 		label = "dotr  new"
+	case modeLinkPath, modeLinkTarget:
+		label = "dotr  link"
+	case modeRetarget:
+		label = "dotr  retarget"
 	case modeConfirm:
 		label = "dotr  confirm"
 	default:
@@ -81,37 +90,67 @@ func (m Model) renderTitle() string {
 }
 
 func (m Model) renderStatus() string {
-	var help string
+	help := m.helpHint()
+	const hPad = 2 // status style Padding(0, 1)
+	inner := m.width - hPad
+	if inner < 8 {
+		inner = max(1, m.width)
+	}
+	helpW := lipgloss.Width(help)
+	left := strings.TrimSpace(m.status)
+	if left == help {
+		left = ""
+	}
+
+	if helpW >= inner {
+		return m.styles.status.Width(m.width).Render(truncate(help, inner))
+	}
+
+	// Always reserve the legend on the right; truncate status on the left.
+	if left == "" {
+		line := strings.Repeat(" ", inner-helpW) + help
+		return m.styles.status.Width(m.width).Render(line)
+	}
+
+	sep := 2
+	leftMax := inner - helpW - sep
+	if leftMax < 4 {
+		return m.styles.status.Width(m.width).Render(truncate(help, inner))
+	}
+	left = truncate(left, leftMax)
+	gap := leftMax - lipgloss.Width(left)
+	if gap < 0 {
+		gap = 0
+	}
+	line := left + strings.Repeat(" ", gap+sep) + help
+	return m.styles.status.Width(m.width).Render(truncate(line, inner))
+}
+
+func (m Model) helpHint() string {
 	switch m.mode {
 	case modeIgnores:
-		help = "j/k  d unignore  e edit  esc"
+		return "j/k  d del  e edit  esc"
 	case modeFilter:
-		help = "type to filter  enter apply  esc clear"
+		return "j/k  enter keep  esc clear"
 	case modePaste:
-		help = "enter paste  esc cancel"
+		return "enter paste  esc"
 	case modeNew:
-		help = "enter create+edit  esc cancel"
+		return "enter create  esc"
+	case modeLinkPath:
+		return "enter next  esc"
+	case modeLinkTarget, modeRetarget:
+		return "enter save  esc"
 	case modeRestore:
-		help = "j/k  enter restore  esc back"
+		return "j/k  enter restore  esc"
 	case modeStow:
-		help = "j/k  enter/l link  u unlink  R restow  esc"
+		return "enter link  u unlink  R restow  esc"
 	case modeConfirm:
-		help = "enter confirm  esc cancel"
+		return "enter ok  esc cancel"
 	case modeHelp:
-		help = "any key to close"
+		return "esc / any key close"
 	default:
-		help = "/ n s y/Y p b R i , ?  q"
+		return "/ search  e edit  l link  ?  q"
 	}
-	left := m.status
-	if left == "" {
-		left = help
-	}
-	gap := m.width - lipgloss.Width(left) - lipgloss.Width(help) - 2
-	if gap < 1 {
-		return m.styles.status.Width(m.width).Render(truncate(left, m.width-2))
-	}
-	line := left + strings.Repeat(" ", gap) + help
-	return m.styles.status.Width(m.width).Render(truncate(line, m.width))
 }
 
 func (m Model) renderBody() string {
@@ -303,7 +342,15 @@ func (m Model) renderPreviewHeader(width int) string {
 	}
 	parts = append(parts, formatSize(e.Size))
 	if e.Symlink {
-		parts = append(parts, "→")
+		if info, err := symlink.Read(e.AbsPath); err == nil {
+			arrow := "→ " + info.Target
+			if info.Dangle {
+				arrow = "⚠ " + info.Target
+			}
+			parts = append(parts, arrow)
+		} else {
+			parts = append(parts, "→")
+		}
 	}
 	line := strings.Join(parts, "  ")
 	return m.styles.muted.Render(truncate(line, width))

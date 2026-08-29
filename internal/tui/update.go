@@ -14,6 +14,7 @@ import (
 	"github.com/lum1n/dotr/internal/preview"
 	"github.com/lum1n/dotr/internal/scan"
 	"github.com/lum1n/dotr/internal/stow"
+	"github.com/lum1n/dotr/internal/symlink"
 )
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -254,6 +255,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.status = "created " + msg.path
 		return m, tea.Batch(openEditor(msg.path), scanCmd())
 
+	case symlinkDoneMsg:
+		m.mode = modeBrowse
+		m.input.Blur()
+		m.linkPath = ""
+		if msg.err != nil {
+			m.status = "symlink: " + msg.err.Error()
+			break
+		}
+		m.status = msg.op + " " + msg.path
+		m.scanning = true
+		cmds = append(cmds, scanCmd())
+
 	case editorFinishedMsg:
 		if msg.err != nil {
 			m.status = "editor: " + msg.err.Error()
@@ -296,6 +309,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updatePasteKey(msg)
 		case modeNew:
 			return m.updateNewKey(msg)
+		case modeLinkPath:
+			return m.updateLinkPathKey(msg)
+		case modeLinkTarget:
+			return m.updateLinkTargetKey(msg)
+		case modeRetarget:
+			return m.updateRetargetKey(msg)
 		case modeRestore:
 			return m.updateRestoreKey(msg)
 		case modeHelp:
@@ -400,11 +419,35 @@ func (m Model) updateBrowseKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 		m.status = "editing dotr config…"
 		return m, openEditor(path)
 
-	case "/":
+	case "/", "ctrl+f":
 		return m, m.enterFilter()
 
 	case "n":
 		return m, m.enterNew()
+
+	case "l":
+		return m, m.enterLinkPath()
+
+	case "t":
+		return m, m.enterRetarget()
+
+	case "D":
+		e, ok := m.selected()
+		if !ok {
+			return m, nil
+		}
+		if !symlink.Is(e.AbsPath) {
+			m.status = "not a symlink"
+			return m, nil
+		}
+		info, err := symlink.Read(e.AbsPath)
+		target := "?"
+		if err == nil {
+			target = info.Target
+		}
+		m.askConfirm(confirmDeleteSymlink, e.AbsPath,
+			fmt.Sprintf("⚠ delete symlink (keeps target %s)?", target))
+		return m, nil
 
 	case "tab":
 		if m.focus == focusList {
@@ -497,7 +540,7 @@ func (m Model) updateBrowseKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 		if m.filter != "" {
 			m.filter = ""
 			m.rebuildFilter()
-			m.status = "filter cleared"
+			m.status = "search cleared"
 			return m, m.requestPreview()
 		}
 
@@ -602,6 +645,9 @@ func (m Model) updateConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.mode = modeStow
 			m.status = fmt.Sprintf("unstow %s…", pkg)
 			return m, stowOpCmd(m.stowOpts, stow.ActionUnstow, []string{pkg})
+		case confirmDeleteSymlink:
+			m.status = "removing symlink…"
+			return m, symlinkRemoveCmd(path)
 		}
 	}
 	return m, nil
@@ -609,34 +655,70 @@ func (m Model) updateConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 func (m Model) updateFilterKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
-	case "esc", "ctrl+c":
+	case "esc":
 		m.mode = modeBrowse
 		m.input.Blur()
 		m.filter = ""
 		m.input.SetValue("")
 		m.rebuildFilter()
-		m.status = "filter cleared"
+		m.status = "search cleared"
 		return m, m.requestPreview()
+
+	case "ctrl+c":
+		if m.watcher != nil {
+			_ = m.watcher.Close()
+			m.watcher = nil
+		}
+		return m, tea.Quit
 
 	case "enter":
 		m.mode = modeBrowse
 		m.input.Blur()
 		m.filter = m.input.Value()
 		m.rebuildFilter()
-		m.status = fmt.Sprintf("filter %q · %d matches", m.filter, len(m.filtered))
+		if m.filter == "" {
+			m.status = "search cleared"
+		} else {
+			m.status = fmt.Sprintf("search %q · %d matches", m.filter, len(m.filtered))
+		}
 		return m, m.requestPreview()
 
 	case "ctrl+w":
 		m.input.SetValue("")
 		m.filter = ""
 		m.rebuildFilter()
+		m.status = fmt.Sprintf("%d/%d matches", len(m.filtered), len(m.entries))
+		return m, m.requestPreview()
+
+	case "down", "ctrl+n", "ctrl+j":
+		return m.moveCursor(1)
+
+	case "up", "ctrl+p", "ctrl+k":
+		return m.moveCursor(-1)
+
+	case "tab":
+		// Keep typing; don't steal tab into the textinput as a character if possible.
+		if m.focus == focusList {
+			m.focus = focusPreview
+		} else {
+			m.focus = focusList
+		}
 		return m, nil
+	}
+
+	// j/k navigate when the input is empty; otherwise type into the query.
+	if msg.String() == "j" && m.input.Value() == "" {
+		return m.moveCursor(1)
+	}
+	if msg.String() == "k" && m.input.Value() == "" {
+		return m.moveCursor(-1)
 	}
 
 	var cmd tea.Cmd
 	m.input, cmd = m.input.Update(msg)
 	m.filter = m.input.Value()
 	m.rebuildFilter()
+	m.status = fmt.Sprintf("%d/%d matches", len(m.filtered), len(m.entries))
 	return m, tea.Batch(cmd, m.requestPreview())
 }
 
@@ -689,6 +771,95 @@ func (m Model) updateNewKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	m.input, cmd = m.input.Update(msg)
 	return m, cmd
+}
+
+func (m Model) updateLinkPathKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc", "ctrl+c":
+		m.mode = modeBrowse
+		m.input.Blur()
+		m.linkPath = ""
+		m.status = "link cancelled"
+		return m, nil
+
+	case "enter":
+		path, err := resolveNewPath(m.input.Value())
+		if err != nil {
+			m.status = err.Error()
+			return m, nil
+		}
+		return m, m.enterLinkTarget(path)
+	}
+	var cmd tea.Cmd
+	m.input, cmd = m.input.Update(msg)
+	return m, cmd
+}
+
+func (m Model) updateLinkTargetKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc", "ctrl+c":
+		m.mode = modeBrowse
+		m.input.Blur()
+		m.linkPath = ""
+		m.status = "link cancelled"
+		return m, nil
+
+	case "enter":
+		target, err := resolveSymlinkTarget(m.input.Value())
+		if err != nil {
+			m.status = err.Error()
+			return m, nil
+		}
+		link := m.linkPath
+		m.input.Blur()
+		m.status = "linking…"
+		return m, symlinkCreateCmd(link, target)
+	}
+	var cmd tea.Cmd
+	m.input, cmd = m.input.Update(msg)
+	return m, cmd
+}
+
+func (m Model) updateRetargetKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc", "ctrl+c":
+		m.mode = modeBrowse
+		m.input.Blur()
+		m.linkPath = ""
+		m.status = "retarget cancelled"
+		return m, nil
+
+	case "enter":
+		target, err := resolveSymlinkTarget(m.input.Value())
+		if err != nil {
+			m.status = err.Error()
+			return m, nil
+		}
+		link := m.linkPath
+		m.input.Blur()
+		m.status = "retargeting…"
+		return m, symlinkRetargetCmd(link, target)
+	}
+	var cmd tea.Cmd
+	m.input, cmd = m.input.Update(msg)
+	return m, cmd
+}
+
+func resolveSymlinkTarget(raw string) (string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", fmt.Errorf("empty target")
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	// Keep relative targets as-is (stow-style); only expand ~/ and leave
+	// other relative paths untouched for os.Symlink.
+	if strings.HasPrefix(raw, "~/") || raw == "~" {
+		return symlink.ExpandTilde(raw, home), nil
+	}
+	return raw, nil
 }
 
 func (m Model) updateRestoreKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {

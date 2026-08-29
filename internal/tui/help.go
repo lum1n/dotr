@@ -7,8 +7,8 @@ Navigation
   g / G           top / bottom
   tab             focus list ↔ preview
   ctrl+d/u        half page
-  /               filter (space-separated terms)
-  esc             clear filter / leave mode
+  / · ctrl+f      search (fuzzy; live results; ↑↓/ctrl+n/p move)
+  enter           keep search · esc clear
   r               rescan
   mouse           click list / wheel (live reload when watch: true)
   q               quit
@@ -16,6 +16,9 @@ Navigation
 Files
   e               edit in $EDITOR
   n               new file (then $EDITOR)
+  l               create symlink (path, then target)
+  t               retarget selected symlink
+  D               delete symlink only (keeps target; confirms)
   y               yank path (clipboard + paste buffer)
   Y               yank file contents (confirms if secret)
   p               paste/duplicate yanked file
@@ -44,6 +47,8 @@ List marks
 CLI
   dotr list [q]   dotr edit <q>   dotr backup <q>
   dotr restore <q>   dotr config   dotr ignore [--list|--add]
+  dotr link <path> <target>   dotr retarget <path> <target>
+  dotr unlink <path>
   dotr stow list | link | unlink | restow [pkg…]
   dotr doctor   dotr version
 

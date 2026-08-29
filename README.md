@@ -45,6 +45,9 @@ dotr version
 | `dotr stow link [pkg…]` | Stow (`-n` dry-run) |
 | `dotr stow unlink [pkg…]` | Unstow (prompts; `-y` skips; `-n` dry-run) |
 | `dotr stow restow [pkg…]` | Restow |
+| `dotr link <path> <target>` | Create symlink |
+| `dotr retarget <path> <target>` | Change symlink target |
+| `dotr unlink <path>` | Remove symlink only |
 | `dotr doctor` | Check environment |
 | `dotr version` | Print version |
 | `dotr completion zsh` | Shell completion |
@@ -55,8 +58,11 @@ dotr version
 |-----|--------|
 | `j` / `k` | Move |
 | `tab` | List ↔ preview |
-| `/` | Filter |
+| `/` · `ctrl+f` | Search (fuzzy, live) |
 | `n` | New file |
+| `l` | Create symlink |
+| `t` | Retarget symlink |
+| `D` | Delete symlink (keeps target) |
 | `e` | Edit |
 | `y` / `Y` | Yank path / contents |
 | `p` | Paste duplicate |
