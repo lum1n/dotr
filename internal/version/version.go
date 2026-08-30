@@ -12,7 +12,7 @@ import (
 // tag so `go build` / `go install .` still report a real version. `go install
 // github.com/lum1n/dotr@vX.Y.Z` overwrites this from module build info.
 var (
-	Version = "0.3.2"
+	Version = "0.3.3"
 	Commit  = "none"
 	Date    = "unknown"
 )

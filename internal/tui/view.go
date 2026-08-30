@@ -148,7 +148,7 @@ func (m Model) helpHint() string {
 	case modeHelp:
 		return "esc / any key close"
 	default:
-		return "/ search  e edit  l link  ?  q"
+		return "/ search  e edit  l link  ? help  q quit"
 	}
 }
 
@@ -374,12 +374,7 @@ func (m Model) renderList(width, height int) string {
 	}
 	for i := m.offset; i < end; i++ {
 		e := m.entries[m.filtered[i]]
-		line := formatEntry(e, m.git, m.stowOwners)
-		if i == m.cursor {
-			b.WriteString(m.styles.listCursor.Width(width).Render(truncate(line, width)))
-		} else {
-			b.WriteString(m.styles.listNormal.Width(width).Render(truncate(line, width)))
-		}
+		b.WriteString(formatListLine(m.styles, e, m.git, m.stowOwners, width, i == m.cursor))
 		if i < end-1 {
 			b.WriteByte('\n')
 		}
@@ -387,26 +382,60 @@ func (m Model) renderList(width, height int) string {
 	return b.String()
 }
 
-func formatEntry(e scan.Entry, git map[string]gitstatus.Kind, owners map[string]string) string {
+func formatListLine(s styles, e scan.Entry, git map[string]gitstatus.Kind, owners map[string]string, width int, cursor bool) string {
+	prefix := formatListMarks(s, e, git, owners)
+	prefixW := lipgloss.Width(prefix)
+	nameW := width - prefixW
+	if nameW < 1 {
+		return truncate(prefix, width)
+	}
+	name := " " + displayName(e)
+	row := s.listNormal
+	if cursor {
+		row = s.listCursor
+	}
+	return prefix + row.Width(nameW).Render(truncate(name, nameW))
+}
+
+func formatListMarks(s styles, e scan.Entry, git map[string]gitstatus.Kind, owners map[string]string) string {
+	g := " "
+	if git != nil {
+		if k, ok := git[e.AbsPath]; ok {
+			if m := k.Mark(); m != "" {
+				g = s.colorGitMark(k).Render(m)
+			}
+		}
+	}
 	mark := " "
 	if e.Symlink {
-		mark = "↗"
+		mark = s.markSymlink.Render("↗")
 	}
 	if owners != nil {
 		if _, ok := owners[e.AbsPath]; ok {
-			mark = "S"
+			mark = s.markStow.Render("S")
 		}
 	}
 	if secret.Path(e.AbsPath) {
-		mark = "🔒"
+		mark = s.secret.Render("🔒")
 	}
-	g := " "
-	if git != nil {
-		if m := git[e.AbsPath].Mark(); m != "" {
-			g = m
-		}
+	return g + mark
+}
+
+func (s styles) colorGitMark(k gitstatus.Kind) lipgloss.Style {
+	switch k {
+	case gitstatus.Modified:
+		return s.markModified
+	case gitstatus.Added:
+		return s.markAdded
+	case gitstatus.Deleted:
+		return s.markDeleted
+	case gitstatus.Untracked:
+		return s.markUntracked
+	case gitstatus.Clean:
+		return s.markClean
+	default:
+		return s.muted
 	}
-	return g + mark + " " + displayName(e)
 }
 
 func truncate(s string, width int) string {

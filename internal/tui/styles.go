@@ -5,17 +5,24 @@ import (
 )
 
 type styles struct {
-	title       lipgloss.Style
-	status      lipgloss.Style
-	panel       lipgloss.Style
-	panelActive lipgloss.Style
-	listCursor  lipgloss.Style
-	listNormal  lipgloss.Style
-	listApp     lipgloss.Style
-	muted       lipgloss.Style
-	parseOK     lipgloss.Style
-	parseFail   lipgloss.Style
-	secret      lipgloss.Style
+	title         lipgloss.Style
+	status        lipgloss.Style
+	panel         lipgloss.Style
+	panelActive   lipgloss.Style
+	listCursor    lipgloss.Style
+	listNormal    lipgloss.Style
+	listApp       lipgloss.Style
+	muted         lipgloss.Style
+	parseOK       lipgloss.Style
+	parseFail     lipgloss.Style
+	secret        lipgloss.Style
+	markModified  lipgloss.Style
+	markAdded     lipgloss.Style
+	markDeleted   lipgloss.Style
+	markUntracked lipgloss.Style
+	markClean     lipgloss.Style
+	markSymlink   lipgloss.Style
+	markStow      lipgloss.Style
 }
 
 func newStyles() styles {
@@ -58,6 +65,26 @@ func newStyles() styles {
 			Bold(true),
 		secret: lipgloss.NewStyle().
 			Foreground(lipgloss.Color("214")).
+			Bold(true),
+		markModified: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("220")).
+			Bold(true),
+		markAdded: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("42")).
+			Bold(true),
+		markDeleted: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("196")).
+			Bold(true),
+		markUntracked: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("213")).
+			Bold(true),
+		markClean: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("240")),
+		markSymlink: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("81")).
+			Bold(true),
+		markStow: lipgloss.NewStyle().
+			Foreground(accent).
 			Bold(true),
 	}
 }
